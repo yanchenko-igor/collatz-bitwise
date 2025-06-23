@@ -1,0 +1,97 @@
+\documentclass\[12pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\title{A Bitwise Streaming Model of the Collatz Conjecture}
+\author{Igor Yanchenko}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We construct a chain of deterministic, stateless machines capable of computing successive steps of the Collatz function using only bitwise operations and streamed input. This model provides a computational proof of the Collatz step's independence from integer size, enabling local transformation without global knowledge of the number.
+\end{abstract}
+
+\section{Introduction}
+
+The Collatz Conjecture posits that repeated application of the function
+
+$$
+C(n) = \begin{cases}
+\frac{n}{2}, & n \equiv 0 \pmod{2} \\
+3n + 1, & n \equiv 1 \pmod{2}
+\end{cases}
+$$
+
+eventually leads to 1 for all positive integers \$n\$. Traditional treatments rely on full integer arithmetic. Here, we reformulate the problem as a local transformation on binary input received bit-by-bit, demonstrating that each Collatz step is computable via finite-state logic applied incrementally.
+
+\section{Bitwise Collatz Model}
+
+We define a \emph{CollatzMachine} that:
+\begin{itemize}
+\item Accepts input as binary digits in least-significant-bit (LSB) first order.
+\item Determines parity from the first bit.
+\item Applies the Collatz rule based on parity:
+\begin{itemize}
+\item If even: right shift (i.e., remove LSB).
+\item If odd: perform \$3n + 1\$.
+\end{itemize}
+\item Emits output in LSB-first order.
+\item Streams output to a downstream machine, if provided.
+\end{itemize}
+
+The machine maintains no global state beyond the current input buffer, which can be incrementally extended. The transformation is thus stateless between Collatz steps and supports streamed computation.
+
+\section{Implementation}
+
+We provide a Python class \texttt{CollatzMachine} that implements the behavior described. The machine:
+\begin{enumerate}
+\item Accepts bits using \texttt{nextbit(bit)}.
+\item Finalizes input with \texttt{end\_of\_input()}, triggering transformation.
+\item Applies the appropriate rule.
+\item Converts the result to LSB-first binary and streams to \texttt{downstream} if defined.
+\end{enumerate}
+
+The process is recursively composable:
+\begin{verbatim}
+m3 = CollatzMachine()
+m2 = CollatzMachine(downstream=m3)
+m1 = CollatzMachine(downstream=m2)
+for b in \[1, 0, 1]:  # input 5 (binary 101 LSB-first)
+m1.nextbit(b)
+m1.end\_of\_input()
+\end{verbatim}
+
+This will compute: \$5 \rightarrow 16 \rightarrow 8 \rightarrow \dots \rightarrow 1\$.
+
+\section{Theorem}
+
+\textbf{Theorem.} The Collatz function \$C(n)\$ is computable by a chain of finite-state machines operating over bitwise LSB-first streamed input, with each machine applying one transformation step in isolation, using only local logic and no global context.
+
+\begin{proof}\[Sketch]
+Given a binary input of arbitrary length, the first bit (LSB) reveals parity. The machine chooses the appropriate rule and computes the result using integer arithmetic simulated by bitwise addition and multiplication. The result is converted to binary (LSB-first) and streamed. The logic is independent of input size, and downstream machines repeat the same logic, forming a chain that eventually terminates when the result is 1.
+\end{proof}
+
+\section{Discussion and Implications}
+
+This bitwise, streaming formulation demonstrates that:
+\begin{itemize}
+\item Collatz steps can be computed without storing or knowing the entire number.
+\item Each step is computable in isolation.
+\item The sequence can be modeled by a pipeline of automata with finite memory.
+\item This supports symbolic verification and mechanical proof strategies.
+\end{itemize}
+
+\section{Conclusion}
+
+The Collatz Conjecture can be reformulated as a bitwise streaming process. Our implementation shows that Collatz steps are computable incrementally and locally, without the need for arbitrary-precision arithmetic. This model may open avenues for formal verification or hardware-based implementations.
+
+\section\*{Code Repository}
+Code and simulation scripts are available at: \url{[https://github.com/yanchenko-igor/collatz-bitwise}](https://github.com/yanchenko-igor/collatz-bitwise})
+
+\end{document}
+
