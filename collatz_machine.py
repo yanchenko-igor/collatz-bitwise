@@ -121,7 +121,7 @@ class CollatzMachine:
 
 
 if __name__ == "__main__":
-    tape = Tape("11011", debug=True)  # 27 in binary
+    tape = Tape("11011")  # 27 in binary
     machine = CollatzMachine(tape)
     steps = machine.run_until_done()
     print("Final state:", tape.to_binary_string())

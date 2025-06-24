@@ -1,117 +1,73 @@
-# Collatz Bitwise Machine
+# CollatzMachine — Bitwise Collatz Sequence Simulator
 
-This project presents a **bitwise, streaming implementation of the Collatz Conjecture**. Rather than operating on full integers, it models each Collatz step as a finite-state machine that consumes input one bit at a time (LSB-first) and produces transformed output in real-time.
+## Overview
 
-This proves that the Collatz transformation:
+`CollatzMachine` simulates the Collatz sequence on a binary tape using pure bitwise operations. It models the process as an in-place Turing-like machine, manipulating bits without cloning or unnecessary overhead.
 
-- ✅ Is computable without access to the full input
-- ✅ Works incrementally and recursively
-- ✅ Preserves correctness for arbitrarily long integers
-- ✅ Can be chained to produce the full Collatz sequence
+- Operates on a **binary tape** represented as a list of bits (LSB at index 0).
+- Implements **exact binary shift and add operations** to perform the Collatz step:
+  - Even numbers → divide by 2 (right shift).
+  - Odd numbers → `3n + 1` (bit-shift left, add original, add 1).
+- Uses **postponed carries only for bits beyond current tape length**, ensuring minimal bit creation.
+- Fully **in-place**, no tape cloning or state duplication.
+- Designed for **precise control** over bit mutation and carry propagation.
+- Provides optional **debug mode** for step-by-step internal state tracing.
 
----
+## Features
 
-## 📁 Project Structure
+- Handles arbitrary binary inputs as strings (e.g. `"101"`, `"11011"`).
+- Automatically grows tape as needed only when result requires new bits.
+- Stops execution once tape reaches the value 1 (`0b1`).
+- Supports inspecting current tape state as a binary string.
+- Minimal and efficient — no unnecessary object creation or memory waste.
 
-```
-.
-├── LICENSE               # CC0 Public Domain Dedication
-├── README.md             # This file
-├── collatz_machine.py    # The CollatzMachine class (bitwise logic)
-├── demo.py               # Demo: runs Collatz on 27 recursively
-└── main.tex              # LaTeX paper for arXiv submission
-```
-
----
-
-## 🧠 What Is This?
-
-The **Collatz Conjecture** posits that for any integer `n > 0`, repeated application of:
-
-- If even: `n → n / 2`
-- If odd: `n → 3n + 1`
-
-...eventually reaches `1`.
-
-This project implements each step as a **bitwise transformation**, driven by machines that:
-
-- Take bits LSB-first
-- Stream the output
-- Require no knowledge of the full number
-
----
-
-## 🚀 Quick Start
-
-### 🐍 Run the Demo
-
-```bash
-python3 demo.py
-```
-
-You’ll see the full Collatz trajectory for `27` printed to the terminal.
-
-### 📦 Example Output
-
-```
---- Collatz Chain for 27 ---
-Step 0: 27 → 82
-Step 1: 82 → 41
-Step 2: 41 → 124
-...
-Step 110: 2 → 1
-Step 111: 1 → 1
-```
-
----
-
-## 🧪 Core Logic
-
-See [`collatz_machine.py`](./collatz_machine.py) for the `CollatzMachine` class, which exposes:
+## Usage
 
 ```python
-m = CollatzMachine()
-m.nextbit(1)
-m.nextbit(0)
-...
-m.end_of_input()
-print(m.report())
+from collatz_machine import Tape, CollatzMachine
+
+# Initialize tape with binary string (LSB at right)
+tape = Tape("101", debug=True)  # binary 5
+
+machine = CollatzMachine(tape)
+
+steps = machine.run_until_done()
+
+print("Final binary:", tape.to_binary_string())  # Output: 1
+print("Steps taken:", steps)                      # Number of Collatz steps
 ```
 
-Each machine represents **one transformation** (`n → n/2` or `3n+1`), and its output can be fed into the next machine in a chain.
+## API
 
----
+### Tape
 
-## 📄 Research Paper
+- `Tape(bit_string: str, debug=False)`: Create tape from binary string.
+- `ensure(index)`: Get bit at index, creating if missing and applying postponed carries.
+- `add_carry(index, carry_val)`: Add carry to bit, postponing if bit not yet created.
+- `to_binary_string()`: Get current binary tape string (MSB to LSB).
+- `is_one()`: Check if tape represents the number 1.
 
-The mathematical write-up and proof sketch are in [`main.tex`](./main.tex), suitable for submission to arXiv. It includes:
+### CollatzMachine
 
-- Bitwise formulation of Collatz
-- Construction of the machine
-- Theorem and sketch proof
-- Implications for computation theory
+- `CollatzMachine(tape)`: Initialize with a Tape.
+- `step()`: Perform one Collatz step.
+- `run_until_done(max_steps=1000)`: Run steps until tape equals 1 or max steps reached.
 
-To compile:
+## Design Notes
 
-```bash
-pdflatex main.tex
-```
+- Postponed carries only stored for **non-existing bits**; applied immediately on creation.
+- Bit indexing starts at 0 (least significant bit).
+- Debug logs provide trace of carry propagation and bit mutation.
+- Avoids unnecessary bit creation by halting carry propagation when no effect.
 
----
+## Philosophy
 
-## 📜 License
+This tool embodies the principle of **maximal autonomy and minimal interference**:
 
-This work is released into the **public domain** under the [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/) dedication.
+- No hidden state cloning or overhead.
+- Total transparency and control over bit-level operations.
+- Efficient, market-driven logic of binary computation without coercion.
 
-> You may copy, modify, distribute, and use the work, even for commercial purposes, all without asking permission.
+## License
 
-See [`LICENSE`](./LICENSE).
-
----
-
-## 🙌 Contributing
-
-Forks and experiments welcome. No attribution required. If you improve the structure, visualization, or apply it in symbolic computation or formal verification, feel free to open an issue or share your fork.
-
----
-
+Public Domain — free and unbound.
