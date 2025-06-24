@@ -1,98 +1,129 @@
-class CollatzMachine:
-    _instance_counter = 0
+class Bit:
+    def __init__(self, index, value, tape):
+        self.index = index
+        self.value = value
+        self.tape = tape
 
-    def __init__(self, downstream=None, debug=False):
-        self.id = CollatzMachine._instance_counter
-        CollatzMachine._instance_counter += 1
+    def __repr__(self):
+        return f"{self.value}"
 
-        self.input_bits = []        # LSB-first input bits
-        self.output_bits = []       # LSB-first output bits (n // 2 or 3n+1)
-        self.input_done = False
-        self.finalized = False
-        self.downstream = downstream
+
+class Tape:
+    def __init__(self, bit_string, debug=False):
+        self.bits = {}
+        for i, ch in enumerate(reversed(bit_string)):
+            self.bits[i] = Bit(i, int(ch), self)
+        self.postponed_carries = {}  # postponed carries beyond current bits
         self.debug = debug
 
-        if self.debug:
-            print(f"[Machine {self.id}] Initialized")
+    def ensure(self, index):
+        if index not in self.bits:
+            # Create new bit initialized with 0
+            self.bits[index] = Bit(index, 0, self)
+            # Apply postponed carries for this bit if any
+            if index in self.postponed_carries:
+                carry_val = self.postponed_carries.pop(index)
+                old_val = self.bits[index].value
+                total = old_val + carry_val
+                self.bits[index].value = total % 2
+                overflow = total // 2
+                if overflow > 0:
+                    # Postpone overflow carry to next bit
+                    self.postponed_carries[index + 1] = self.postponed_carries.get(index + 1, 0) + overflow
+                if self.debug:
+                    print(f"[Postponed carry applied] Bit[{index}]: {old_val} + {carry_val} -> {self.bits[index].value} overflow {overflow}")
+        return self.bits[index]
 
-    def nextbit(self, bit):
-        if self.input_done:
-            raise RuntimeError("Cannot add bits after end_of_input")
-        if bit not in (0, 1):
-            raise ValueError("Bit must be 0 or 1")
-        self.input_bits.append(str(bit))
-        if self.debug:
-            print(f"[Machine {self.id}] Received input bit: {bit}")
-
-    def end_of_input(self):
-        if self.input_done:
+    def add_carry(self, index, carry_val):
+        if carry_val == 0:
             return
-        self.input_done = True
+        old_val = self.bits[index].value if index in self.bits else 0
+        total = old_val + carry_val
+        new_val = total % 2
+        overflow = total // 2
 
-        n = int(''.join(self.input_bits[::-1]), 2)  # Reconstruct original number
-        if self.debug:
-            print(f"[Machine {self.id}] Input decimal: {n}")
-
-        if n == 0:
-            result = 0
-        elif n % 2 == 0:
-            result = n // 2
-            if self.debug:
-                print(f"[Machine {self.id}] Even → {n} // 2 = {result}")
+        if index in self.bits:
+            if new_val == old_val and overflow == 0:
+                # No change, no carry — stop here
+                return
+            self.bits[index].value = new_val
         else:
-            result = 3 * n + 1
-            if self.debug:
-                print(f"[Machine {self.id}] Odd → 3*{n} + 1 = {result}")
-
-        # Convert result to LSB-first binary
-        if result == 0:
-            self.output_bits = ['0']
-        else:
-            self.output_bits = list(bin(result)[2:])[::-1]
+            # Only create bit if new_val != 0 or overflow > 0
+            if new_val == 0 and overflow == 0:
+                return
+            self.bits[index] = Bit(index, new_val, self)
 
         if self.debug:
-            print(f"[Machine {self.id}] Output bits (LSB first): {self.output_bits}")
+            print(f"[Add carry] Bit[{index}]: {old_val} + {carry_val} -> {new_val} overflow {overflow}")
 
-        # Emit to downstream
-        if self.downstream:
-            for b in self.output_bits:
-                self.downstream.nextbit(int(b))
-            self.downstream.end_of_input()
+        if overflow > 0:
+            self.add_carry(index + 1, overflow)
 
-        self.finalized = True
 
-    def report(self):
-        input_dec = int(''.join(self.input_bits[::-1]), 2) if self.input_bits else 0
-        output_dec = int(''.join(self.output_bits[::-1]), 2) if self.output_bits else 0
-        return {
-            'id': self.id,
-            'input_bits': self.input_bits,
-            'input_decimal': input_dec,
-            'output_bits': self.output_bits,
-            'output_decimal': output_dec,
-            'finalized': self.finalized
-        }
+    def to_binary_string(self):
+        max_index = max((i for i in self.bits if self.bits[i].value != 0), default=0)
+        return ''.join(str(self.ensure(i).value) for i in reversed(range(0, max_index + 1))) or '0'
+
+    def is_one(self):
+        return (
+            self.ensure(0).value == 1 and
+            all(self.ensure(i).value == 0 for i in range(1, max(self.bits.keys()) + 1))
+        )
+
+
+class CollatzMachine:
+    def __init__(self, tape):
+        self.tape = tape
+
+    def step(self):
+        if self.tape.ensure(0).value % 2 == 0:
+            # Divide by 2: shift right
+            max_index = max(self.tape.bits.keys())
+            for i in range(max_index):
+                self.tape.ensure(i).value = self.tape.ensure(i + 1).value
+            # Remove last bit
+            self.tape.bits.pop(max_index, None)
+            if self.tape.debug:
+                print(f"[div2] Tape: {self.tape.to_binary_string()}")
+        else:
+            # Apply (3n + 1): (n << 1) + n + 1
+            original = {i: self.tape.ensure(i).value for i in self.tape.bits}
+            max_index = max(original.keys())
+
+            # Shift left (n << 1)
+            for i in reversed(range(max_index + 1)):
+                self.tape.ensure(i + 1).value = self.tape.ensure(i).value
+            self.tape.ensure(0).value = 0
+
+            # Add original back (+ n)
+            carry = 0
+            for i in range(max_index + 2):
+                old_val = self.tape.ensure(i).value
+                add_val = original.get(i, 0)
+                total = old_val + add_val + carry
+                self.tape.ensure(i).value = total % 2
+                carry = total // 2
+            if carry > 0:
+                self.tape.add_carry(max_index + 2, carry)
+
+            # Add 1 (+1)
+            self.tape.add_carry(0, 1)
+
+            if self.tape.debug:
+                print(f"[3n+1] Tape: {self.tape.to_binary_string()}")
+
+    def run_until_done(self, max_steps=1000):
+        steps = 0
+        while not self.tape.is_one() and steps < max_steps:
+            self.step()
+            steps += 1
+        return steps
 
 
 if __name__ == "__main__":
-    #m = make_recursive_machine([1, 0, 1])
-    # Define a chain depth of 3
-    m6 = CollatzMachine(debug=True)
-    m5 = CollatzMachine(downstream=m6, debug=True)
-    m4 = CollatzMachine(downstream=m5, debug=True)
-    m3 = CollatzMachine(downstream=m4, debug=True)
-    m2 = CollatzMachine(downstream=m3, debug=True)
-    m1 = CollatzMachine(downstream=m2, debug=True)
-    
-    # Input 5 (binary: 101, LSB-first)
-    for b in [1, 0, 1]:
-        m1.nextbit(b)
-    
-    m1.end_of_input()
-    print(m1.report())
-    print(m2.report())
-    print(m3.report())
-    print(m4.report())
-    print(m5.report())
-    print(m6.report())
+    tape = Tape("11011", debug=True)  # 27 in binary
+    machine = CollatzMachine(tape)
+    steps = machine.run_until_done()
+    print("Final state:", tape.to_binary_string())
+    print("Steps taken:", steps)
 
