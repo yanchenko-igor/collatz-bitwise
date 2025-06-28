@@ -1,70 +1,102 @@
-class VirtualMemoryCollatzMachine:
-    def __init__(self, n, debug=False):
-        self.debug = debug
-        self.step_count = 0
+from collections import deque
 
-        # True internal value, not truncated
-        self.true_value = n
+class CollatzMachine:
+    def __init__(self):
+        self.decimal_input = ''
+        self.collatz_n = None
+        self.step = 0
+        self.started = False
+        self.end_of_input = False
+        self.waiting_for_input = False
+        self.processed_steps = []  # Track already processed numbers to avoid recounting
+        self.full_history = []  # Store full Collatz values for recomputation
 
-        # Initial tape: bits in LSB-first order (index 0 is LSB)
-        bin_n = bin(n)[2:]
-        self.tape = list(bin_n.zfill(len(bin_n) + 1))[::-1]  # extra zero for MSB padding
-        self.tape_len = len(self.tape)
+    def feed_decimal_digits(self, digits):
+        self.decimal_input = digits + self.decimal_input  # Prepend new digits as MSB
+        print(f"Collected decimal input: {self.decimal_input}")
+        new_input_value = int(self.decimal_input)
 
-        # Overflow tape: holds extra MSBs beyond tape capacity
-        self.overflow_tape = []
-
-    def current_state(self):
-        return ''.join(self.tape[::-1])  # show MSB-first for human view
-
-    def value_from_tape(self):
-        return int(''.join(self.tape[::-1]), 2)
-
-    def step(self):
-        self.step_count += 1
-
-        if self.debug:
-            print(f"\nStep {self.step_count}")
-            print(f"Before: bits={self.current_state()}  value={self.true_value}")
-
-        # --- Compute 3n + 1 or n // 2 using true value ---
-        if self.true_value % 2 == 0:
-            self.true_value //= 2
+        # Recalculate from the beginning
+        self.collatz_n = new_input_value
+        if not self.started:
+            print(f"\n▶ Starting Collatz on {self.collatz_n} (from full decimal input)")
+            self.started = True
         else:
-            self.true_value = 3 * self.true_value + 1
+            print(f"\n▶ New input merged. Recalculating Collatz sequence for {self.collatz_n}.")
 
-        new_bin = bin(self.true_value)[2:]  # strip '0b'
-        new_bits = list(new_bin)
+        self.step = 0
+        self.full_history = []
+        self.processed_steps = []
+        self.waiting_for_input = False
+        self.run_until_wait_or_done()
 
-        # --- Handle overflow ---
-        overflow_len = max(0, len(new_bits) - self.tape_len)
-        if overflow_len > 0:
-            self.overflow_tape = new_bits[:overflow_len]
-            new_bits = new_bits[overflow_len:]
+    def run_until_wait_or_done(self):
+        while True:
+            if self.collatz_n == 1:
+                if self.end_of_input:
+                    print(f"✅ Sequence ended in {self.step} steps.")
+                    self.reset()
+                else:
+                    print("Sequence reached 1, but input is still open, waiting for more digits...")
+                    self.waiting_for_input = True
+                break
+
+            if self.waiting_for_input:
+                break
+
+            if self.collatz_n in self.processed_steps:
+                break
+            else:
+                self.processed_steps.append(self.collatz_n)
+                self.full_history.append(self.collatz_n)
+
+            if self.collatz_n % 2 == 0:
+                self.collatz_n //= 2
+                print(f"Step {self.step}: Even → {self.collatz_n}")
+            else:
+                self.collatz_n = 3 * self.collatz_n + 1
+                print(f"Step {self.step}: Odd → 3n+1 = {self.collatz_n}")
+
+            self.step += 1
+
+        if self.end_of_input and self.collatz_n == 1:
+            print(f"✅ Final summary: Total steps = {self.step}.")
+            self.reset()
+
+    def end_input(self):
+        self.end_of_input = True
+        self.waiting_for_input = False
+        if self.started:
+            self.run_until_wait_or_done()
+
+    def reset(self):
+        print("Sequence complete, resetting input.\n")
+        self.decimal_input = ''
+        self.collatz_n = None
+        self.started = False
+        self.waiting_for_input = False
+        self.end_of_input = False
+        self.step = 0
+        self.processed_steps = []
+        self.full_history = []
+
+def main():
+    machine = CollatzMachine()
+    print("Enter digits in normal order (e.g., 1501).")
+    print("Press ENTER on an empty line to continue or end input.")
+    print("Type 'exit' to quit.\n")
+
+    while True:
+        line = input(">> ").strip()
+        if line.lower() == 'exit':
+            break
+        elif line == '':
+            machine.end_input()
+        elif line.isdigit():
+            machine.feed_decimal_digits(line)
         else:
-            self.overflow_tape = []
-
-        # --- Write to tape (LSB-first) ---
-        self.tape = new_bits[::-1]  # reverse for LSB-first
-
-        # If tape shrank, pad with zeros to maintain tape_len
-        self.tape += ['0'] * (self.tape_len - len(self.tape))
-
-        if self.debug:
-            print(f"After:  bits={self.current_state()}  value={self.true_value}")
-            if self.overflow_tape:
-                print(f"Overflow tape: {''.join(self.overflow_tape)}")
-
-        return self.true_value != 1
-
-    def run(self):
-        print(f"Start: bits={self.current_state()}  value={self.true_value}")
-        while self.step():
-            pass
-        print(f"\n✅ Collapsed in {self.step_count} steps.")
-
+            print("⚠ Invalid input. Please enter digits or press ENTER.")
 
 if __name__ == "__main__":
-    machine = VirtualMemoryCollatzMachine(27, debug=True)
-    machine.run()
+    main()
 
